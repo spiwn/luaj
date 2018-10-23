@@ -388,17 +388,17 @@ public class LuaTable extends LuaValue implements Metatable {
     @Override
     public int rawlen() {
         int a = getArrayLength();
-        int n = a+1,m=0;
-        while ( !rawget(n).isnil() ) {
-            m = n;
-            n += a+getHashLength()+1;
+        int m = a;
+        while (m > 0 && rawget(m).isnil()) {
+            m--;
         }
-        while ( n > m+1 ) {
-            int k = (n+m) / 2;
-            if ( !rawget(k).isnil() )
-                m = k;
-            else
-                n = k;
+        if (m < a) {
+            return m;
+        }
+
+        int n = a + 1;
+        while ( !rawget(n).isnil() ) {
+            m = n++;
         }
         return m;
     }
