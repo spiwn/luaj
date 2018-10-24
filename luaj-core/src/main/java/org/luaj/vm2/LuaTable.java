@@ -86,14 +86,21 @@ public class LuaTable extends LuaValue implements Metatable {
     /** metatable for this table, or null */
     protected Metatable m_metatable;
 
-    protected StrongSlot first;
-    protected StrongSlot last;
+    protected StrongSlot hashFirst;
+    protected StrongSlot hashLast;
+
+    protected StrongSlot intFirst;
+    protected StrongSlot intLast;
 
     {
-        first = new NormalEntry(LuaString.valueOf("first Node"), NIL);
-        last = new NormalEntry(LuaString.valueOf("last Node"), NIL);
-        first.setAfter(last);
-        last.setBefore(first);
+        hashFirst = new NormalEntry(LuaString.valueOf("first hash node"), NIL);
+        hashLast = new NormalEntry(LuaString.valueOf("last hash node"), NIL);
+        hashFirst.setAfter(hashLast);
+        hashLast.setBefore(hashFirst);
+        intFirst = new NormalEntry(LuaString.valueOf("first int node"), NIL);
+        intLast = new NormalEntry(LuaString.valueOf("last int node"), NIL);
+        intFirst.setAfter(intLast);
+        intLast.setBefore(intFirst);
     }
 
     /** Construct empty table */
@@ -409,11 +416,11 @@ public class LuaTable extends LuaValue implements Metatable {
         while (m > 0 && rawget(m).isnil()) {
             m--;
         }
-        Slot c = first;
-        while ((c = c.getAfter()) != last) {
+        Slot c = intFirst;
+        while ((c = c.getAfter()) != intLast) {
             StrongSlot s = c.first();
             int v;
-            if (s != null && s.key().isint() && (v = s.key().checkint()) > m) {
+            if (s != null && (v = s.key().checkint()) > m) {
                 m = v;
             }
         }
@@ -463,7 +470,17 @@ public class LuaTable extends LuaValue implements Metatable {
                     error("invalid key to 'next'");
                 }
 
-                while ((slot = slot.getAfter()) != last) {
+                if (key.isint() && i > 0) {
+                    while ((slot = slot.getAfter()) != intLast) {
+                        StrongSlot r = slot.first();
+                        if (r != null) {
+                            return r.toVarargs();
+                        }
+                    }
+                    slot = hashFirst;
+                }
+
+                while ((slot = slot.getAfter()) != hashLast) {
                     StrongSlot r = slot.first();
                     if (r != null) {
                         return r.toVarargs();
@@ -480,14 +497,23 @@ public class LuaTable extends LuaValue implements Metatable {
             if ( array[i] != null ) {
                 LuaValue value = m_metatable == null ? array[i] : m_metatable.arrayget(array, i);
                 if (value != null) {
-                    return varargsOf(LuaInteger.valueOf(i+1),value);
+                    return varargsOf(LuaInteger.valueOf(i+1), value);
                 }
             }
         }
 
-        Slot slot = first;
+        Slot slot = intFirst;
 
-        while ((slot = slot.getAfter()) != last) {
+        while ((slot = slot.getAfter()) != intLast) {
+            StrongSlot r = slot.first();
+            if (r != null) {
+                return r.toVarargs();
+            }
+        }
+
+        slot = hashFirst;
+
+        while ((slot = slot.getAfter()) != hashLast) {
             StrongSlot r = slot.first();
             if (r != null) {
                 return r.toVarargs();
@@ -504,9 +530,17 @@ public class LuaTable extends LuaValue implements Metatable {
      */
     @Override
     public Varargs inext(LuaValue key) {
-        int k = key.checkint() + 1;
-        LuaValue v = rawget(k);
-        return v.isnil()? NONE: varargsOf(LuaInteger.valueOf(k),v);
+        int k = key.checkint();
+        int c = k + 1;
+        if (c > 0 && c <= array.length) {
+            LuaValue v = array[c - 1];
+            if (v == null) {
+                return NIL;
+            } else {
+                return varargsOf(LuaInteger.valueOf(c), v);
+            }
+        }
+        return NIL;
     }
 
     /**
@@ -533,18 +567,22 @@ public class LuaTable extends LuaValue implements Metatable {
                 if ( key.isinttype() && key.toint() > 0 ) {
                     // a rehash might make room in the array portion for this key.
                     rehash( key.toint() );
-                    if ( arrayset(key.toint(), value) )
+                    if ( arrayset(key.toint(), value) ) {
                         return;
+                    }
                 } else {
                     rehash( -1 );
                 }
                 index = hashSlot( key );
+            } else if (key.isinttype() && key.toint() == 1) {
+                rehash(1);
+                arrayset(1, value);
+                return;
             }
             Slot entry = ( m_metatable != null )
                 ? m_metatable.entry( key, value )
                 : defaultEntry( key, value );
-
-            addToEnd(entry);
+            addNewSlotToChain(entry, key);
             if (hash[index] != null) {
                 entry = hash[index].add( entry );
                 hash[ index ] = entry;
@@ -557,9 +595,9 @@ public class LuaTable extends LuaValue implements Metatable {
 
     public String hashToString() {
         StringBuilder sb = new StringBuilder();
-        Slot s = first.getAfter();
+        Slot s = hashFirst.getAfter();
 
-        while (s != last) {
+        while (s != hashLast) {
             StrongSlot c = s.first();
             sb.append("(");
             sb.append(c.key().toString());
@@ -823,16 +861,16 @@ public class LuaTable extends LuaValue implements Metatable {
             if ( ( v = oldArray[ i++ ] ) != null ) {
                 int slot = hashmod( LuaInteger.hashCode( i ), newHashMask );
                 Slot newEntry;
+                LuaInteger k = valueOf(i);
                 if ( m_metatable != null ) {
-                    newEntry = m_metatable.entry( valueOf(i), v );
+                    newEntry = m_metatable.entry( k, v );
                     if ( newEntry == null ) {
                         continue;
                     }
-                    addToEnd(newEntry);
                 } else {
-                    newEntry = defaultEntry( valueOf(i), v );
-                    addToEnd(newEntry);
+                    newEntry = defaultEntry( k, v );
                 }
+                addNewSlotToChain(newEntry, k);
                 newHash[ slot ] = ( newHash[slot] != null )
                     ? newHash[slot].add( newEntry ) : newEntry;
             }
@@ -843,11 +881,32 @@ public class LuaTable extends LuaValue implements Metatable {
         hashEntries -= movingToArray;
     }
 
-    private void addToEnd(Slot newEntry) {
-        newEntry.setBefore(last.getBefore());
-        newEntry.getBefore().setAfter(newEntry);
-        newEntry.setAfter(last);
-        last.setBefore(newEntry);
+    private void addNewSlotToChain(Slot newEntry, LuaValue key) {
+        int k;
+        if (key.isint() && (k = key.checkint()) > 0) {
+            ;
+            Slot s = intLast;
+            while ((s = s.getBefore()) != intFirst) {
+                StrongSlot f;
+                if ((f = s.first()) != null && f.key().checkint() < k) {
+                    s.getAfter().setBefore(newEntry);
+                    newEntry.setAfter(s.getAfter());
+                    s.setAfter(newEntry);
+                    newEntry.setBefore(s);
+                    return;
+                }
+            }
+            intFirst.getAfter().setBefore(newEntry);
+            newEntry.setAfter(intFirst.getAfter());
+            newEntry.setBefore(intFirst);
+            intFirst.setAfter(newEntry);
+
+        } else {
+            newEntry.setBefore(hashLast.getBefore());
+            newEntry.getBefore().setAfter(newEntry);
+            newEntry.setAfter(hashLast);
+            hashLast.setBefore(newEntry);
+        }
     }
 
     @Override
