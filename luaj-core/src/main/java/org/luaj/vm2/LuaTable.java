@@ -403,6 +403,33 @@ public class LuaTable extends LuaValue implements Metatable {
         return m;
     }
 
+    public int maxIntKey() {
+        int a = getArrayLength();
+        int m = a;
+        while (m > 0 && rawget(m).isnil()) {
+            m--;
+        }
+        Slot c = first;
+        while ((c = c.getAfter()) != last) {
+            StrongSlot s = c.first();
+            int v;
+            if (s != null && s.key().isint() && (v = s.key().checkint()) > m) {
+                m = v;
+            }
+        }
+        return m;
+    }
+
+    public int size() {
+        int c = 0;
+        for (int i = 1; i <= array.length; i++) {
+            if (!get(i).isnil()) {
+                c++;
+            }
+        }
+        return c + hashEntries;
+    }
+
     /**
      * Get the next element after a particular key in the table
      * @return key,value or nil
