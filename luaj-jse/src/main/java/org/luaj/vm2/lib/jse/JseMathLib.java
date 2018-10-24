@@ -81,6 +81,7 @@ public class JseMathLib extends org.luaj.vm2.lib.MathLib {
         math.set("cosh", new cosh());
         math.set("exp", new exp());
         math.set("log", new log());
+        math.set("log10", new log10());
         math.set("pow", new pow());
         math.set("sinh", new sinh());
         math.set("tanh", new tanh());
@@ -94,6 +95,7 @@ public class JseMathLib extends org.luaj.vm2.lib.MathLib {
     static final class cosh extends UnaryOp { protected double call(double d) { return Math.cosh(d); } }
     static final class exp extends UnaryOp { protected double call(double d) { return Math.exp(d); } }
     static final class log extends UnaryOp { protected double call(double d) { return Math.log(d); } }
+    static final class log10 extends UnaryOp { protected double call(double d) { return Math.log10(d); } }
     static final class pow extends BinaryOp { protected double call(double x, double y) { return Math.pow(x, y); } }
     static final class sinh extends UnaryOp { protected double call(double d) { return Math.sinh(d); } }
     static final class tanh extends UnaryOp { protected double call(double d) { return Math.tanh(d); } }
